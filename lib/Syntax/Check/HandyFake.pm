@@ -81,6 +81,7 @@ sub _findConfigFile {
 
 1;
 __END__
+
 =head1 NAME
 
 Syntax::Check::HandyFake - Perl extension for blah blah blah

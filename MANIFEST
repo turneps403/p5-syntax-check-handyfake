@@ -1,6 +1,6 @@
 Changes
 Makefile.PL
 MANIFEST
-README.md
+README.pod
 t/Syntax-Check-HandyFake.t
 lib/Syntax/Check/HandyFake.pm
