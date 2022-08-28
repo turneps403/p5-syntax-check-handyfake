@@ -26,28 +26,25 @@ sub import {
     chomp;
     next unless $_;
     next if $_ =~ /^\s*#/;
-    $DB::signal = 1;
     my ($pkg_name, $export_names) = split(/\s*\->\s*/, $_);
     next unless $pkg_name;
     next if _isLoaded($pkg_name);
     next if _canBeLoaded($pkg_name);
-    $export_names = $export_names ? [split(/\s*,\s*/, $export_names)] : [];
     my $pkg_str = ["package ".$pkg_name.";"];
-    if (@$export_names) {
+    if ($export_names) {
       push @$pkg_str, "use Exporter 'import';";
-      push @$pkg_str, "our \@EXPORT = qw(".join(" ", @$export_names).");";
-      for (@$export_names) {
+      my ($export, $export_ok) = $export_names ? split(/\s*;\s*/, $export_names) : ();
+      push @$pkg_str, "our \@EXPORT = qw(".join(" ", split(/\s*,\s*/, $export)).");" if $export;
+      push @$pkg_str, "our \@EXPORT_OK = qw(".join(" ", split(/\s*,\s*/, $export_ok)).");" if $export_ok;
+      my $uniq = {};
+      for (grep {$_ && !$uniq->{$_}++} split(/\s*,\s*/, $export || ""), split(/\s*,\s*/, $export_ok || "")) {
         push @$pkg_str, "sub ".$_."{}";
       }
-      push @$pkg_str, "our \@EXPORT_OK = \@EXPORT;";
-      # push @$pkg_str, "our \%EXPORT_TAGS = (all => \\\@EXPORT_OK,);";
     }
-    push @$pkg_str, "sub VERSION { 12 }";
     push @$pkg_str, "1;";
-    print join "\n", @$pkg_str; 
     eval join "\n", @$pkg_str;
     (my $pkg_path = $pkg_name .".pm") =~ s/::/\//g;
-    $INC{$pkg_path} = $INC[0]."/".$pkg_path;
+    $INC{$pkg_path} = $INC[0]."/FAKE/".$pkg_path;
   }
   close(CNF);
 }
@@ -84,12 +81,33 @@ __END__
 
 =head1 NAME
 
-Syntax::Check::HandyFake - Perl extension for blah blah blah
+Syntax::Check::HandyFake helps you to avoid installation some packages and pass by syntax check
 
 =head1 SYNOPSIS
 
-  use Syntax::Check::HandyFake;
-  blah blah blah
+  $ cat ~/.handyfake
+  My::Awesome::Package
+  Another::Stupid::Thing -> useless_func_one, useless_func_two
+
+
+  $ cat test.pl
+  #!/usr/local/bin/perl
+  use strict;
+  use warnings;
+
+  use My::Awesome::Package;
+  use Another::Stupid::Thing;
+
+  print My::Awesome::Package->VERSION . "\n";
+  print Another::Stupid::Thing->VERSION . "\n";
+
+  useless_func_one;
+
+  exit;
+
+
+  $ perl -I some/lib -MSyntax::Check::HandyFake -wc test.pl
+  test.pl syntax OK
 
 =head1 DESCRIPTION
 
