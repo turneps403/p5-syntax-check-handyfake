@@ -2,65 +2,56 @@ package Syntax::Check::HandyFake;
 use strict;
 use warnings;
 
-use Cwd qw();
 use File::Spec qw();
+use Cwd qw();
+use PPI;
 
-our $VERSION = '0.01';
+my $FILE = '.p5-handyfake';
 
-my $FILE = '.handyfake';
+BEGIN {
+  die "Operating system does not suitable for usage " . __PACKAGE__
+    if grep {$^O eq $_} qw(MSWin32 os2 VMS NetWare symbian dos cygwin amigaos);
+}
 
 sub import {
-  if ($^O =~ /win(?:32|64)/i) {
-    warn "Please, dont use this package on the system '".$^O."'";
-    exit(1);
-  }
   my $class = shift;
-  my $file = @_ ? shift : _findConfigFile();
-  unless ($file and -f $file) {
-    warn "file (by default $FILE) wasnt found";
-    return;
+
+  my $exp_func = {};
+  my $cnf_file = shift || _findConfigFile();
+  if ($cnf_file) {
+    if (-f $cnf_file) {
+      open(CNF, "<", $cnf_file) or die $!;
+      while(<CNF>) {
+        $_ =~ s/^\s+|\s+$//g;
+        next unless $_;
+        next if /^\s*#/;
+        my ($pkg, @exp) = split /\s+/, $_;
+        $exp_func->{$pkg} = \@exp;
+      }
+      close(CNF);
+    } else {
+      die "'".$cnf_file."' not a file";
+    }
   }
 
-  open(CNF, "<", $file) or die $!;
-  while(<CNF>) {
-    chomp;
-    next unless $_;
-    next if $_ =~ /^\s*#/;
-    my ($pkg_name, $export_names) = split(/\s*\->\s*/, $_);
-    next unless $pkg_name;
-    next if _isLoaded($pkg_name);
-    next if _canBeLoaded($pkg_name);
-    my $pkg_str = ["package ".$pkg_name.";"];
-    if ($export_names) {
-      push @$pkg_str, "use Exporter 'import';";
-      my ($export, $export_ok) = $export_names ? split(/\s*;\s*/, $export_names) : ();
-      push @$pkg_str, "our \@EXPORT = qw(".join(" ", split(/\s*,\s*/, $export)).");" if $export;
-      push @$pkg_str, "our \@EXPORT_OK = qw(".join(" ", split(/\s*,\s*/, $export_ok)).");" if $export_ok;
-      my $uniq = {};
-      for (grep {$_ && !$uniq->{$_}++} split(/\s*,\s*/, $export || ""), split(/\s*,\s*/, $export_ok || "")) {
-        push @$pkg_str, "sub ".$_."{}";
+  my $cur_pkg = 'main';
+  for (PPI::Document->new($0)->children) {
+    if ($_->isa('PPI::Statement::Package')) {
+      $cur_pkg = ($_->children)[2]->content;
+    } elsif ($_->isa('PPI::Statement::Include')) {
+      my $module = $_->module;
+      (my $pkg_path = $module .".pm") =~ s/::/\//g;
+      $INC{$pkg_path} = $INC[0]."/FAKE/".$pkg_path;
+      my $efunc = $exp_func->{$module} || [];
+      for (@$efunc) {
+        no strict 'refs';
+        my $sub = $cur_pkg . '::' . $_;
+        *$sub = sub {};
       }
     }
-    push @$pkg_str, "1;";
-    eval join "\n", @$pkg_str;
-    (my $pkg_path = $pkg_name .".pm") =~ s/::/\//g;
-    $INC{$pkg_path} = $INC[0]."/FAKE/".$pkg_path;
   }
-  close(CNF);
-}
 
-sub _isLoaded {
-  (my $pkg_name = shift . ".pm") =~ s/::/\//g;
-  return $INC{$pkg_name} ? 1 : 0;
-}
-
-sub _canBeLoaded {
-  (my $pkg_name = shift . ".pm") =~ s/::/\//g;
-  return 1 if $INC{$pkg_name};
-  for (@INC) {
-    return 1 if -e $_.'/'.$pkg_name;
-  }
-  return;
+  return 1;
 }
 
 sub _findConfigFile {
@@ -74,7 +65,6 @@ sub _findConfigFile {
   return $ENV{HOME} && -e File::Spec->catfile($ENV{HOME}, $FILE) ? 
     File::Spec->catfile($ENV{HOME}, $FILE) : undef;
 }
-
 
 1;
 __END__
