@@ -2,9 +2,10 @@ package Syntax::Check::HandyFake;
 use strict;
 use warnings;
 
+use Scalar::Util qw();
 use File::Spec qw();
 use Cwd qw();
-use PPI;
+use PPI qw();
 
 my $FILE = '.p5-handyfake';
 
@@ -34,6 +35,8 @@ sub import {
     }
   }
 
+  my $q = qr/^([^\(]+)(?:\(([^\)]{0,})\))?$/o;
+
   my $cur_pkg = 'main';
   for (PPI::Document->new($0)->children) {
     if ($_->isa('PPI::Statement::Package')) {
@@ -44,10 +47,26 @@ sub import {
       $INC{$pkg_path} = $INC[0]."/FAKE/".$pkg_path;
       my $efunc = $exp_func->{$module} || [];
       for (@$efunc) {
+        my ($fname, $prttp) = $_ =~ $q;
+        $DB::signal = 1;
+        my $sub = $cur_pkg . '::' . $fname;
         no strict 'refs';
-        my $sub = $cur_pkg . '::' . $_;
-        *$sub = sub {};
+        if ($prttp) {
+          *$sub = Scalar::Util::set_prototype(sub {}, $prttp);
+        } else {
+          *$sub = sub {};
+        }
       }
+    }
+  }
+
+  for (@{ $exp_func->{"-"} || [] }) {
+    my ($sub, $prttp) = $_ =~ $q;
+    no strict 'refs';
+    if ($prttp) {
+      *$sub = Scalar::Util::set_prototype(sub {}, $prttp);
+    } else {
+      *$sub = sub {};
     }
   }
 
