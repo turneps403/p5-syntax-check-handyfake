@@ -1,3 +1,7 @@
+=head1 Check before
+
+Syntax::Check (cant work with custom parmas like 'use foo::bar')
+
 =head1 NAME
 
 Syntax::Check::HandyFake - Perl extension for blah blah blah
